@@ -15,7 +15,7 @@ import siphash;
 
 ubyte[16] k = cast(ubyte[])"To be|not to be!";
 ubyte[] msg = cast(ubyte[])"that is the question.";
-auto hashed = siphash24(k, message);
+auto hashed = siphash24(k, msg);
 ```
 
 # TODO
