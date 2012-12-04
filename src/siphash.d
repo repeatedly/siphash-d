@@ -34,15 +34,17 @@ module siphash;
 @safe pure nothrow
 ulong siphash24(in ubyte[16] key, in ubyte[] message)
 {
+    enum BlockSize = ulong.sizeof;
+
     immutable k0 = u8to64_le(key.ptr);
-    immutable k1 = u8to64_le(key.ptr, ulong.sizeof);
+    immutable k1 = u8to64_le(key.ptr, BlockSize);
     ulong v0 = k0 ^ 0x736f6d6570736575UL;
     ulong v1 = k1 ^ 0x646f72616e646f6dUL;
     ulong v2 = k0 ^ 0x6c7967656e657261UL;
     ulong v3 = k1 ^ 0x7465646279746573UL;
 
     size_t index;
-    for (size_t blocks = message.length & ~7; index < blocks; index += 8) {
+    for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
         immutable mi = u8to64_le(message.ptr, index);
         v3 ^= mi;
         mixin(SipRound);
@@ -51,7 +53,7 @@ ulong siphash24(in ubyte[16] key, in ubyte[] message)
     }
 
     ulong tail = cast(ulong)((message.length & 0xff) << 56);
-    switch (message.length % 8) {
+    switch (message.length % BlockSize) {
     case 7: tail |= cast(ulong)message[index + 6] << 48; goto case 6;
     case 6: tail |= cast(ulong)message[index + 5] << 40; goto case 5;
     case 5: tail |= cast(ulong)message[index + 4] << 32; goto case 4;
