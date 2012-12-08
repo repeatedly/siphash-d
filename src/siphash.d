@@ -52,7 +52,7 @@ ulong siphash24(in ubyte[16] key, in ubyte[] message)
         v0 ^= mi;
     }
 
-    ulong tail = cast(ulong)((message.length & 0xff) << 56);
+    ulong tail = cast(ulong)(message.length & 0xff) << 56;
     switch (message.length % BlockSize) {
     case 7: tail |= cast(ulong)message[index + 6] << 48; goto case 6;
     case 6: tail |= cast(ulong)message[index + 5] << 40; goto case 5;
