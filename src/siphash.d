@@ -32,7 +32,7 @@ module siphash;
  *  a 8 byte hash value.
  */
 @safe pure nothrow
-ulong siphash24(in ubyte[16] key, in ubyte[] message)
+ulong siphash(size_t C, size_t D)(in ubyte[16] key, in ubyte[] message)
 {
     enum BlockSize = ulong.sizeof;
 
@@ -47,8 +47,8 @@ ulong siphash24(in ubyte[16] key, in ubyte[] message)
     for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
         immutable mi = u8to64_le(message.ptr, index);
         v3 ^= mi;
-        mixin(SipRound);
-        mixin(SipRound);
+        foreach (Unused; 0..C)
+            mixin(SipRound);
         v0 ^= mi;
     }
 
@@ -66,18 +66,18 @@ ulong siphash24(in ubyte[16] key, in ubyte[] message)
     }
 
     v3 ^= tail;
-    mixin(SipRound);
-    mixin(SipRound);
+    foreach (Unused; 0..C)
+        mixin(SipRound);
     v0 ^= tail;
 
     v2 ^= 0xff;
-    mixin(SipRound);
-    mixin(SipRound);
-    mixin(SipRound);
-    mixin(SipRound);
+    foreach (Unused; 0..D)
+        mixin(SipRound);
 
     return v0 ^ v1 ^ v2 ^ v3;
 }
+
+alias siphash!(2, 4) siphash24;
 
 private:
 
