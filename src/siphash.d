@@ -34,8 +34,6 @@ module siphash;
 @safe pure nothrow
 ulong siphash(size_t C, size_t D)(in ubyte[16] key, in ubyte[] message)
 {
-    enum BlockSize = ulong.sizeof;
-
     immutable k0 = u8to64_le(key.ptr);
     immutable k1 = u8to64_le(key.ptr, BlockSize);
     ulong v0 = k0 ^ 0x736f6d6570736575UL;
@@ -79,7 +77,113 @@ ulong siphash(size_t C, size_t D)(in ubyte[16] key, in ubyte[] message)
 
 alias siphash!(2, 4) siphash24;
 
+/**
+ * SipHash object implements std.digest like API for supporting streaming update.
+ *
+ * Examples:
+ * -----
+ * ubyte[16] key = cast(ubyte[])"To be|not to be!";
+ * auto sh = SipHash!(2, 4)(key);
+ *
+ * sh.start();
+ * foreach (chunk; chunks(cast(ubyte[])"that is the question.", 2))
+ *     sh.put(chunk);
+ * auto hashed = sh.finish();
+ * -----
+ */
+struct SipHash(size_t C, size_t D)
+{
+  private:
+    immutable ulong k0;
+    immutable ulong k1;
+    ulong v0;
+    ulong v1;
+    ulong v2;
+    ulong v3;
+
+    size_t processedLength;
+    const(ubyte)[] message;
+
+
+  public:
+    @safe pure nothrow
+    {
+        this(in ubyte[16] key)
+        {
+            this(u8to64_le(key.ptr), u8to64_le(key.ptr, BlockSize));
+        }
+
+        this(in ulong key0, in ulong key1)
+        {
+            k0 = key0;
+            k1 = key1;
+        }
+
+        void start()
+        {
+            this = SipHash!(C, D)(k0, k1);
+
+            v0 = k0 ^ 0x736f6d6570736575UL;
+            v1 = k1 ^ 0x646f72616e646f6dUL;
+            v2 = k0 ^ 0x6c7967656e657261UL;
+            v3 = k1 ^ 0x7465646279746573UL;
+            processedLength = 0;
+        }
+
+        void put(scope const(ubyte)[] data...)
+        {
+            message ~= data;
+
+            size_t index;
+            for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
+                immutable mi = u8to64_le(message.ptr, index);
+                v3 ^= mi;
+                foreach (Unused; 0..C)
+                    mixin(SipRound);
+                v0 ^= mi;
+                processedLength += BlockSize;
+            }
+
+            if (index != 0)
+                message = message[index..$];
+        }
+
+        ulong finish()
+        {
+            ulong tail = cast(ulong)((processedLength + message.length) & 0xff) << 56;
+            switch (message.length % BlockSize) {
+            case 7: tail |= cast(ulong)message[6] << 48; goto case 6;
+            case 6: tail |= cast(ulong)message[5] << 40; goto case 5;
+            case 5: tail |= cast(ulong)message[4] << 32; goto case 4;
+            case 4: tail |= cast(ulong)message[3] << 24; goto case 3;
+            case 3: tail |= cast(ulong)message[2] << 16; goto case 2;
+            case 2: tail |= cast(ulong)message[1] <<  8; goto case 1;
+            case 1: tail |= cast(ulong)message[0]; break;
+            default:
+                break;
+            }
+
+            v3 ^= tail;
+            foreach (Unused; 0..C)
+                mixin(SipRound);
+            v0 ^= tail;
+
+            v2 ^= 0xff;
+            foreach (Unused; 0..D)
+                mixin(SipRound);
+
+            ulong result = v0 ^ v1 ^ v2 ^ v3;
+
+            start();
+
+            return result;
+        }
+    }
+}
+
 private:
+
+enum BlockSize = ulong.sizeof;
 
 enum SipRound = "
     v0 += v1;
@@ -116,6 +220,7 @@ ulong u8to64_le(in ubyte* ptr, in size_t i = 0)
 unittest
 {
     import std.conv;
+    import std.range : chunks;
 
     /*
       SipHash-2-4 output with
@@ -151,10 +256,23 @@ unittest
     foreach (ubyte i; 0..16)
         key[i] = i;
 
+    auto sh = SipHash!(2, 4)(key);
+    ulong calcViaStreaming(ubyte[] message)
+    {
+        sh.start();
+        foreach (chunk; chunks(message, 3))
+            sh.put(chunk);
+
+        return sh.finish();
+    }
+
     ubyte[] message;
     foreach (ubyte i; 0..64) {
         auto result = siphash24(key, message);
         assert(result == testVectors[i], "test vector failed for " ~ to!string(i));
+        assert(calcViaStreaming(message) == testVectors[i],
+               "test vector failed for " ~ to!string(i) ~ " in streaming");
+
         message ~= i;
     }
 }
