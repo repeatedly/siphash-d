@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/repeatedly/siphash-d.png)](https://travis-ci.org/repeatedly/siphash-d])
+[![Build Status](https://travis-ci.org/repeatedly/siphash-d.png)](https://travis-ci.org/repeatedly/siphash-d)
 
 # siphash-d
 
