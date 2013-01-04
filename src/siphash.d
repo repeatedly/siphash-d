@@ -1,6 +1,13 @@
 // Written in the D programming language.
 
 /**
+
+$(BOOKTABLE ,
+$(TR $(TH Category) $(TH Functions))
+$(TR $(TDNW Template API) $(TD $(MYREF SipHash)))
+$(TR $(TDNW Helpers) $(TD $(MYREF siphash24Of)))
+)
+
  * SipHash: a fast short-input PRF
  *
  * Example:
@@ -93,7 +100,7 @@ alias siphash!(2, 4).siphashOf siphash24Of;
 /**
  * SipHash object implements std.digest like API for supporting streaming update.
  *
- * Examples:
+ * Example:
  * -----
  * ubyte[16] key = cast(ubyte[])"To be|not to be!";
  * auto sh = SipHash!(2, 4)(key);
@@ -107,12 +114,8 @@ alias siphash!(2, 4).siphashOf siphash24Of;
 struct SipHash(size_t C, size_t D)
 {
   private:
-    immutable ulong k0;
-    immutable ulong k1;
-    ulong v0;
-    ulong v1;
-    ulong v2;
-    ulong v3;
+    immutable ulong k0, k1;
+    ulong v0, v1, v2, v3;
 
     size_t processedLength;
     const(ubyte)[] message;
@@ -121,17 +124,26 @@ struct SipHash(size_t C, size_t D)
   public:
     @safe pure nothrow
     {
+        /**
+         * Constructs SipHash with 16 byte key.
+         */
         this(in ubyte[16] key)
         {
             this(u8to64_le(key.ptr), u8to64_le(key.ptr, BlockSize));
         }
 
+        /**
+         * Constructs SipHash with two 8 byte key numbers.
+         */
         this(in ulong key0, in ulong key1)
         {
             k0 = key0;
             k1 = key1;
         }
 
+        /**
+         * Used to initialize the SipHash.
+         */
         void start()
         {
             this = SipHash!(C, D)(k0, k1);
@@ -143,24 +155,32 @@ struct SipHash(size_t C, size_t D)
             processedLength = 0;
         }
 
+        /**
+         * Use this to feed the digest with data.
+         * Also implements the $(XREF range, OutputRange) interface for $(D ubyte) and $(D const(ubyte)[]).
+         */
         void put(scope const(ubyte)[] data...)
         {
             message ~= data;
 
             size_t index;
-            for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
+            for (size_t blocks = message.length & ~7; index < blocks;
+                 index += BlockSize, processedLength += BlockSize) {
                 immutable mi = u8to64_le(message.ptr, index);
                 v3 ^= mi;
                 foreach (Unused; 0..C)
                     mixin(SipRound);
                 v0 ^= mi;
-                processedLength += BlockSize;
             }
 
             if (index != 0)
                 message = message[index..$];
         }
 
+        /**
+         * Returns the finished SipHash hash as ubyte[8], not ulong.
+         * This also calls $(LREF start) to reset the internal state.
+         */
         ubyte[8] finish()
         {
             ulong tail = cast(ulong)((processedLength + message.length) & 0xff) << 56;
