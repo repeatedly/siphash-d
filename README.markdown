@@ -42,10 +42,6 @@ sh.put(cast(ubyte[])"that is the question.");
 auto hashed = sh.finish();
 ```
 
-# TODO
-
-* Implement SipHash struct like std.digest hashes.
-
 # Link
 
 * [SipHash: a fast short-input PRF](https://www.131002.net/siphash/)
