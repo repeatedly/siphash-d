@@ -8,7 +8,7 @@
  * // Create key
  * ubyte[16] key = cast(ubyte[])"To be|not to be!";
  * // Compute hash with key and arbitrary message
- * ulong  hashed = siphash24(key, cast(ubyte[])"that is the question.");
+ * ulong  hashed = siphash24Of(key, cast(ubyte[])"that is the question.");
  * assert(hashed == 17352353082512417190);
  * -----
  *
@@ -21,61 +21,74 @@
  */
 module siphash;
 
-/**
- * Computes SipHash hashes of arbitrary data.
- *
- * Params:
- *  key     = 16 byte key to hash
- *  message = an arbitrary message
- *
- * Returns:
- *  a 8 byte hash value.
- */
-@safe pure nothrow
-ulong siphash(size_t C, size_t D)(in ubyte[16] key, in ubyte[] message)
-{
-    immutable k0 = u8to64_le(key.ptr);
-    immutable k1 = u8to64_le(key.ptr, BlockSize);
-    ulong v0 = k0 ^ 0x736f6d6570736575UL;
-    ulong v1 = k1 ^ 0x646f72616e646f6dUL;
-    ulong v2 = k0 ^ 0x6c7967656e657261UL;
-    ulong v3 = k1 ^ 0x7465646279746573UL;
+import std.bitmanip : littleEndianToNative, nativeToLittleEndian;
 
-    size_t index;
-    for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
-        immutable mi = u8to64_le(message.ptr, index);
-        v3 ^= mi;
+/**
+ * siphash template, which takes SipRound C and D parameters
+ */
+template siphash(size_t C, size_t D)
+{
+    /**
+     * Computes SipHash hashes of arbitrary data.
+     *
+     * Params:
+     *  key     = 16 byte key to hash
+     *  message = an arbitrary message
+     *
+     * Returns:
+     *  a 8 byte hash value.
+     */
+    @safe pure nothrow
+    ulong siphashOf(in ubyte[16] key, in ubyte[] message)
+    {
+        return siphashOf(u8to64_le(key.ptr), u8to64_le(key.ptr, BlockSize), message);
+    }
+
+    /// ditto
+    @safe pure nothrow
+    ulong siphashOf(in ulong k0, in ulong k1, in ubyte[] message)
+    {
+        ulong v0 = k0 ^ 0x736f6d6570736575UL;
+        ulong v1 = k1 ^ 0x646f72616e646f6dUL;
+        ulong v2 = k0 ^ 0x6c7967656e657261UL;
+        ulong v3 = k1 ^ 0x7465646279746573UL;
+
+        size_t index;
+        for (size_t blocks = message.length & ~7; index < blocks; index += BlockSize) {
+            immutable mi = u8to64_le(message.ptr, index);
+            v3 ^= mi;
+            foreach (Unused; 0..C)
+                mixin(SipRound);
+            v0 ^= mi;
+        }
+
+        ulong tail = cast(ulong)(message.length & 0xff) << 56;
+        switch (message.length % BlockSize) {
+        case 7: tail |= cast(ulong)message[index + 6] << 48; goto case 6;
+        case 6: tail |= cast(ulong)message[index + 5] << 40; goto case 5;
+        case 5: tail |= cast(ulong)message[index + 4] << 32; goto case 4;
+        case 4: tail |= cast(ulong)message[index + 3] << 24; goto case 3;
+        case 3: tail |= cast(ulong)message[index + 2] << 16; goto case 2;
+        case 2: tail |= cast(ulong)message[index + 1] <<  8; goto case 1;
+        case 1: tail |= cast(ulong)message[index]; break;
+        default:
+            break;
+        }
+
+        v3 ^= tail;
         foreach (Unused; 0..C)
             mixin(SipRound);
-        v0 ^= mi;
+        v0 ^= tail;
+
+        v2 ^= 0xff;
+        foreach (Unused; 0..D)
+            mixin(SipRound);
+
+        return v0 ^ v1 ^ v2 ^ v3;
     }
-
-    ulong tail = cast(ulong)(message.length & 0xff) << 56;
-    switch (message.length % BlockSize) {
-    case 7: tail |= cast(ulong)message[index + 6] << 48; goto case 6;
-    case 6: tail |= cast(ulong)message[index + 5] << 40; goto case 5;
-    case 5: tail |= cast(ulong)message[index + 4] << 32; goto case 4;
-    case 4: tail |= cast(ulong)message[index + 3] << 24; goto case 3;
-    case 3: tail |= cast(ulong)message[index + 2] << 16; goto case 2;
-    case 2: tail |= cast(ulong)message[index + 1] <<  8; goto case 1;
-    case 1: tail |= cast(ulong)message[index]; break;
-    default:
-        break;
-    }
-
-    v3 ^= tail;
-    foreach (Unused; 0..C)
-        mixin(SipRound);
-    v0 ^= tail;
-
-    v2 ^= 0xff;
-    foreach (Unused; 0..D)
-        mixin(SipRound);
-
-    return v0 ^ v1 ^ v2 ^ v3;
 }
 
-alias siphash!(2, 4) siphash24;
+alias siphash!(2, 4).siphashOf siphash24Of;
 
 /**
  * SipHash object implements std.digest like API for supporting streaming update.
@@ -148,7 +161,7 @@ struct SipHash(size_t C, size_t D)
                 message = message[index..$];
         }
 
-        ulong finish()
+        ubyte[8] finish()
         {
             ulong tail = cast(ulong)((processedLength + message.length) & 0xff) << 56;
             switch (message.length % BlockSize) {
@@ -172,7 +185,7 @@ struct SipHash(size_t C, size_t D)
             foreach (Unused; 0..D)
                 mixin(SipRound);
 
-            ulong result = v0 ^ v1 ^ v2 ^ v3;
+            ubyte[8] result = nativeToLittleEndian(v0 ^ v1 ^ v2 ^ v3);
 
             start();
 
@@ -262,13 +275,12 @@ unittest
         sh.start();
         foreach (chunk; chunks(message, 3))
             sh.put(chunk);
-
-        return sh.finish();
+        return littleEndianToNative!ulong(sh.finish());
     }
 
     ubyte[] message;
     foreach (ubyte i; 0..64) {
-        auto result = siphash24(key, message);
+        auto result = siphash24Of(key, message);
         assert(result == testVectors[i], "test vector failed for " ~ to!string(i));
         assert(calcViaStreaming(message) == testVectors[i],
                "test vector failed for " ~ to!string(i) ~ " in streaming");
