@@ -1,14 +1,9 @@
 # build mode: 32bit or 64bit
-ifeq (,$(MODEL))
-	MODEL := 64
-endif
+MODEL ?= $(shell getconf LONG_BIT)
+DMD ?= dmd
 
-ifeq (,$(DMD))
-	DMD := dmd
-endif
-
-LIB     = libsiphash.a
-DFLAGS  = -Isrc -m$(MODEL) -w -d -property
+LIB    = libsiphash.a
+DFLAGS = -Isrc -m$(MODEL) -w -d -property
 
 ifeq ($(BUILD),debug)
 	DFLAGS += -g -debug
@@ -26,7 +21,7 @@ DOCDIR    = html
 CANDYDOC  = $(addprefix html/candydoc/, candy.ddoc modules.ddoc)
 DDOCFLAGS = -Dd$(DOCDIR) -c -o- -Isrc $(CANDYDOC)
 
-target: doc $(LIB)
+target: $(LIB)
 
 $(LIB):
 	$(DMD) $(DFLAGS) -lib -of$(LIB) $(SRCS)
