@@ -146,13 +146,12 @@ struct SipHash(size_t C, size_t D)
          */
         void start()
         {
-            this = SipHash!(C, D)(k0, k1);
-
             v0 = k0 ^ 0x736f6d6570736575UL;
             v1 = k1 ^ 0x646f72616e646f6dUL;
             v2 = k0 ^ 0x6c7967656e657261UL;
             v3 = k1 ^ 0x7465646279746573UL;
             processedLength = 0;
+            message.clear();
         }
 
         /**
