@@ -1,0 +1,9 @@
+{
+    "name":        "siphash",
+    "description": "D implementation of SipHash.",
+    "authors":     ["Masahiro Nakagawa"],
+    "homepage":    "https://github.com/repeatedly/siphash-d",
+    "license":     "Boost Software License, Version 1.0",
+    "importPaths": ["src"],
+    "targetType":  "library"
+}
