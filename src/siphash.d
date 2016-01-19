@@ -238,9 +238,10 @@ enum SipRound = "
 ";
 
 @safe pure nothrow
-ulong rotl(in ulong u, in uint s)
+T rotl(T)(in T u, in uint s)
+    if (__traits(isArithmetic, T) && __traits(isUnsigned, T))
 {
-    return (u << s) | (u >> (64 - s));
+    return (u << s) | (u >> (-s & (T.sizeof * 8 - 1)));
 }
 
 @trusted pure nothrow
