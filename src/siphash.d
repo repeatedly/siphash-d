@@ -151,7 +151,7 @@ struct SipHash(size_t C, size_t D)
             v2 = k0 ^ 0x6c7967656e657261UL;
             v3 = k1 ^ 0x7465646279746573UL;
             processedLength = 0;
-            message.clear();
+            message = message.init;
         }
 
         /**
